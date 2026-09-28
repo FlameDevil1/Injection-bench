@@ -1,0 +1,8 @@
+# Generated output and local environments; never commit results, caches or keys.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+results/
+.cache/
+.env

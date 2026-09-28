@@ -1,0 +1,39 @@
+# Mock run: exercises the whole pipeline in seconds with the scripted MockProvider.
+# No model, no network. The numbers it produces are SIMULATED and say nothing about real models.
+# Run with:  python -m bench.run --config config.mock.yaml
+
+app:
+  canary: CANARY-7f3a91
+  marker: PWNED-4471
+
+paths:
+  attacks_dir: attacks
+  benign_file: data/benign_tasks.yaml
+  results_dir: results/mock
+  cache_dir: null          # the mock is instant; no cache needed
+
+run:
+  max_calls: null
+  max_consecutive_errors: 10
+
+defaults:
+  trials: 5
+  temperature: 0.7
+  base_seed: 1000
+  max_tokens: 200
+  timeout_seconds: 5
+  seconds_per_call_estimate: 0.001
+  defenses: [D0, D1, D2, D3, D4]
+
+models:
+  - name: mock-gullible
+    provider: mock
+    model: mock-gullible
+    options: {compliance: 0.6, summary_words: 40}
+
+  - name: mock-cautious
+    provider: mock
+    model: mock-cautious
+    trials: 3
+    defenses: [D0, D2, D4]
+    options: {compliance: 0.2, summary_words: 40}

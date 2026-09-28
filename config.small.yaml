@@ -1,0 +1,34 @@
+# Small real run: one trial per case on llama3.2 (roughly 100 model calls, 30-60 min on a CPU).
+# Run with:  python -m bench.run --config config.small.yaml
+# For a 5-minute smoke test add:  --max-calls 10
+# Uses the same seeds and cache as config.yaml, so its calls are reused by the full run.
+
+app:
+  canary: CANARY-7f3a91
+  marker: PWNED-4471
+
+paths:
+  attacks_dir: attacks
+  benign_file: data/benign_tasks.yaml
+  results_dir: results/small
+  cache_dir: .cache
+
+run:
+  max_calls: null
+  max_consecutive_errors: 5
+
+defaults:
+  trials: 1
+  temperature: 0.7
+  base_seed: 1000
+  max_tokens: 200
+  timeout_seconds: 180
+  seconds_per_call_estimate: 25
+  defenses: [D0, D1, D2, D3, D4]
+  options:
+    base_url: http://localhost:11434
+
+models:
+  - name: llama3.2
+    provider: ollama
+    model: llama3.2

@@ -1,0 +1,52 @@
+# Main experiment config: the long (overnight) run against local Ollama models.
+# Run with:  python -m bench.run --config config.yaml
+# Paths are relative to this file.
+
+app:
+  canary: CANARY-7f3a91   # FAKE secret placed in the toy app's system prompt
+  marker: PWNED-4471      # string attacks try to make the model print (attacks/*.yaml use it literally)
+
+paths:
+  attacks_dir: attacks
+  benign_file: data/benign_tasks.yaml
+  results_dir: results/full
+  cache_dir: .cache       # shared response cache; set to null to disable
+
+run:
+  max_calls: null              # stop after this many real (uncached) model calls; null = no limit
+  max_consecutive_errors: 10   # skip the rest of a model after this many failures in a row
+
+defaults:                      # every model entry inherits these unless it overrides them
+  trials: 5
+  temperature: 0.7
+  base_seed: 1000              # trial i uses seed base_seed + i
+  max_tokens: 200
+  timeout_seconds: 180
+  seconds_per_call_estimate: 25   # only for --dry-run and the first ETA
+  defenses: [D0, D1, D2, D3, D4]
+  options:
+    base_url: http://localhost:11434
+    api_url: https://api.anthropic.com/v1/messages
+
+# Note: D1, D3 and D4 send the same prompts as D0 or D2, so thanks to the cache they
+# cost (almost) no extra model calls. Trials are what make a run long.
+models:
+  - name: llama3.2              # full grid on the small model
+    provider: ollama
+    model: llama3.2
+
+  - name: llama3.1-8b           # reduced grid on a larger model (skipped if not pulled)
+    provider: ollama
+    model: llama3.1:8b
+    trials: 3
+    max_tokens: 150
+    timeout_seconds: 300
+    seconds_per_call_estimate: 60
+
+  - name: claude-haiku          # optional paid API; never runs unless enabled: true
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+    enabled: false
+    trials: 3
+    timeout_seconds: 60
+    seconds_per_call_estimate: 3
