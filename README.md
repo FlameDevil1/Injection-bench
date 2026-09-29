@@ -10,6 +10,9 @@ The only target is **MailMate**, a toy summarizer/email assistant in this repo w
 prompt holds a **fake** secret (`CANARY-7f3a91`). Everything runs locally against Ollama by
 default. There is no telemetry, and no code points at any other app or service.
 
+**New here?** [docs/guide.md](docs/guide.md) is a hands-on walkthrough: the sandbox, attacking a
+model by hand with `play.py`, running experiments, reading results, and changing things.
+
 ## How it works
 
 1. **36 attacks** (`attacks/*.yaml`) in 5 categories try to make MailMate leak the canary or print
@@ -159,6 +162,8 @@ API ignores seeds.
 | `bench/defenses.py` | D0 to D4 as small input/prompt/output functions and a registry. |
 | `bench/run.py` | CLI runner: grid, resume, limits, progress/ETA, error handling. |
 | `bench/report.py` | Tables, heatmaps, findings, `report.md`. |
+| `play.py` | Playground: send one attack or your own text through each defense and see every step. |
+| `docs/guide.md` | Hands-on guide to using and extending the bench. |
 | `docs/threat_model.md` | Assets, attacker, goals, scope, metrics. |
 | `docs/roadmap.md` | Future extensions and where they plug in. |
 
