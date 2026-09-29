@@ -122,6 +122,15 @@ class AnthropicProvider(Provider):
             raise ProviderError(f"anthropic call failed: {type(exc).__name__}") from exc
 
 
+def ensure_trailing_newline(path: Path) -> None:
+    """If an interrupted run left a half-written last line, end it so new rows start cleanly."""
+    if path.exists() and path.stat().st_size > 0:
+        with path.open("rb+") as f:
+            f.seek(-1, 2)
+            if f.read(1) != b"\n":
+                f.write(b"\n")
+
+
 def _unit_hash(text: str) -> float:
     """Map text to a repeatable pseudo-random number in [0, 1)."""
     return int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:12], 16) / 16**12
@@ -198,6 +207,7 @@ class CachedProvider(Provider):
                 except (ValueError, KeyError, TypeError):
                     continue  # a half-written line from an interrupted run
         cache_file.parent.mkdir(parents=True, exist_ok=True)
+        ensure_trailing_newline(cache_file)
 
     def _key(self, *parts: Any) -> str:
         raw = json.dumps([self.inner.name, self.inner.model, *parts], ensure_ascii=False)
