@@ -44,6 +44,8 @@ def test_relative_paths_resolve_against_config_folder(tmp_path):
     lambda d: d["models"][0].update(provider="openai"),
     lambda d: d.update(models=[]),
     lambda d: d["models"].append(dict(d["models"][0])),  # duplicate name
+    lambda d: d["defaults"].update(defenses=["D99"]),
+    lambda d: d["defaults"].update(defenses=[]),
 ])
 def test_invalid_configs_raise(tmp_path, mutate):
     data = base_config(tmp_path)

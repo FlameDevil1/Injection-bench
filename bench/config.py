@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from bench.defenses import DEFENSES
+
 KNOWN_PROVIDERS = ("ollama", "mock", "anthropic")
 
 
@@ -103,8 +105,9 @@ def _model(entry: Any, defaults: dict, index: int) -> ModelConfig:
         raise ConfigError(f"{where}: trials, max_tokens and timeout_seconds must be positive")
     if not 0.0 <= mc.temperature <= 2.0:
         raise ConfigError(f"{where}: temperature must be between 0 and 2")
-    if not mc.defenses or not all(isinstance(d, str) for d in mc.defenses):
-        raise ConfigError(f"{where}: 'defenses' must be a non-empty list of names like D0")
+    unknown = [d for d in mc.defenses if d not in DEFENSES]
+    if not mc.defenses or unknown:
+        raise ConfigError(f"{where}: 'defenses' must be a non-empty list of {sorted(DEFENSES)}; unknown: {unknown}")
     if provider == "ollama" and not isinstance(mc.options.get("base_url"), str):
         raise ConfigError(f"{where}: ollama models need options.base_url")
     if provider == "anthropic" and not isinstance(mc.options.get("api_url"), str):
