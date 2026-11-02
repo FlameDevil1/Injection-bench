@@ -67,7 +67,7 @@ def hardware_info() -> dict[str, object]:
     out = _command("powershell", "-NoProfile", "-NonInteractive", "-Command", script) if sys.platform == "win32" else ""
     try:
         found = json.loads(out)
-        info.update(cpu=found["cpu"], ram_gb=round(found["ram"] / 1024**3, 1), gpus=found["gpus"])
+        info.update(cpu=found["cpu"].strip(), ram_gb=round(found["ram"] / 1024**3, 1), gpus=found["gpus"])
     except (ValueError, KeyError, TypeError):
         pass
     nvidia = _command("nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader")

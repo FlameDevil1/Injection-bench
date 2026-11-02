@@ -367,7 +367,8 @@ def agreement(a: pd.DataFrame, b: pd.DataFrame) -> str:
 def hardware_section(df: pd.DataFrame, primary: str, manifests: dict[str, dict]) -> list[str]:
     """Other computers, kept apart from the numbers above. Hardware can change the exact replies."""
     lines = ["## Hardware comparison", "",
-             f"The results above come only from `{primary}`. These computers ran the same experiment as a replication.", ""]
+             f"The results above come only from `{primary}`. These computers ran the same experiment as a replication. "
+             "Replies also vary between runs on one computer, so a disagreement here doesn't show that hardware caused it.", ""]
     rows = []
     for name in sorted(df["machine"].unique()):
         info = manifests.get(name, {}).get("hardware", {})
