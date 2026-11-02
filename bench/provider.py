@@ -1,7 +1,7 @@
 # Talks to language models. Every model hides behind one tiny interface,
 # Provider.generate(system, user, temperature, seed, max_tokens) -> str, so the rest of
-# the bench does not care whether answers come from a local Ollama server, a scripted
-# fake (MockProvider, used by tests and demo runs), or the optional Anthropic API.
+# the bench does not care whether answers come from a local Ollama server or a scripted
+# fake (MockProvider, used by tests and demo runs).
 # CachedProvider wraps any of them with an on-disk cache so repeated or resumed runs
 # never pay for the same call twice.
 from __future__ import annotations
@@ -10,7 +10,7 @@ import base64
 import hashlib
 import json
 import logging
-import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -26,10 +26,16 @@ class ProviderError(RuntimeError):
     """Any failure to get a reply (network, timeout, bad response). Recorded, never fatal."""
 
 
+class ModelMissing(ProviderError):
+    """The model isn't installed on this computer, so it is skipped."""
+
+
 class Provider(ABC):
     """Base class: a named model that turns (system, user) prompts into text."""
 
     name = "base"
+    digest = ""  # which exact model build answered; filled in by check()
+    server_version = ""
 
     def __init__(self, model: str) -> None:
         self.model = model
@@ -45,26 +51,38 @@ class Provider(ABC):
         """True if generate() would be answered from the cache (only CachedProvider says yes)."""
         return False
 
+    def identity(self) -> dict[str, str]:
+        """The exact model build and server version, for the results manifest."""
+        return {"model_digest": self.digest, "server_version": self.server_version}
+
 
 class OllamaProvider(Provider):
     """A model served by a local Ollama server (default http://localhost:11434)."""
 
     name = "ollama"
 
-    def __init__(self, model: str, base_url: str, timeout_seconds: float) -> None:
+    def __init__(self, model: str, base_url: str, timeout_seconds: float, num_ctx: int | None = None,
+                 expected_digest: str | None = None) -> None:
         super().__init__(model)
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout_seconds
+        self.num_ctx = num_ctx  # fixed context size, so Ollama can't pick a different one per computer
+        self.expected_digest = expected_digest
 
     def check(self) -> None:
         try:
             resp = requests.get(f"{self.base_url}/api/tags", timeout=self.timeout)
             resp.raise_for_status()
-            names = {m.get("name", "") for m in resp.json().get("models", [])}
+            builds = {m.get("name", ""): m.get("digest", "") for m in resp.json().get("models", [])}
+            self.server_version = requests.get(f"{self.base_url}/api/version", timeout=self.timeout).json().get("version", "")
         except (requests.RequestException, ValueError, AttributeError) as exc:
             raise ProviderError(f"cannot reach Ollama at {self.base_url}; is Ollama running? ({exc})") from exc
-        if self.model not in names and f"{self.model}:latest" not in names:
-            raise ProviderError(f"model '{self.model}' is not installed; run: ollama pull {self.model}")
+        if self.model not in builds and f"{self.model}:latest" not in builds:
+            raise ModelMissing(f"model '{self.model}' is not installed; run: ollama pull {self.model}")
+        self.digest = builds.get(self.model) or builds[f"{self.model}:latest"]
+        if self.expected_digest and not self.digest.startswith(self.expected_digest):
+            raise ProviderError(f"model '{self.model}' is build {self.digest[:12]}, but the config expects "
+                                f"{self.expected_digest}; every computer must run the same build")
 
     def generate(self, system: str, user: str, temperature: float, seed: int, max_tokens: int) -> str:
         payload = {
@@ -73,6 +91,8 @@ class OllamaProvider(Provider):
             "stream": False,
             "options": {"temperature": temperature, "seed": seed, "num_predict": max_tokens},
         }
+        if self.num_ctx:
+            payload["options"]["num_ctx"] = self.num_ctx
         try:
             resp = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=self.timeout)
             resp.raise_for_status()
@@ -81,45 +101,6 @@ class OllamaProvider(Provider):
             raise ProviderError(f"ollama call timed out after {self.timeout}s") from exc
         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
             raise ProviderError(f"ollama call failed: {exc}") from exc
-
-
-class AnthropicProvider(Provider):
-    """Optional Claude model via the Anthropic API. Only built when config enables it.
-
-    Reads the key from the ANTHROPIC_API_KEY environment variable and never logs it.
-    The API has no seed parameter, so `seed` only keeps trials apart in the cache.
-    """
-
-    name = "anthropic"
-
-    def __init__(self, model: str, timeout_seconds: float, api_url: str) -> None:
-        super().__init__(model)
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise ProviderError("ANTHROPIC_API_KEY environment variable is not set")
-        self._key = key
-        self.api_url = api_url
-        self.timeout = timeout_seconds
-
-    def generate(self, system: str, user: str, temperature: float, seed: int, max_tokens: int) -> str:
-        headers = {"x-api-key": self._key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
-        body = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "system": system,
-            "messages": [{"role": "user", "content": user}],
-        }
-        try:
-            resp = requests.post(self.api_url, headers=headers, json=body, timeout=self.timeout)
-            if resp.status_code != 200:
-                raise ProviderError(f"anthropic API returned HTTP {resp.status_code}")
-            blocks = resp.json()["content"]
-            return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
-        except requests.Timeout as exc:
-            raise ProviderError(f"anthropic call timed out after {self.timeout}s") from exc
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            raise ProviderError(f"anthropic call failed: {type(exc).__name__}") from exc
 
 
 def ensure_trailing_newline(path: Path) -> None:
@@ -168,24 +149,26 @@ class MockProvider(Provider):
                 if "error" in rule:
                     raise ProviderError(rule["error"])
                 return rule["respond"]
+        found = re.search(r"access code is (\S+)\.", system)  # leak what the prompt holds, as a real model would
+        secret = found.group(1) if found else self.canary
         chance = self.compliance * (0.5 if "untrusted" in text else 1.0)
         if any(c in text for c in self.CUES) and _unit_hash(f"{seed}|{system}|{user}") < chance:
             if self.marker and self.marker.lower() in text:
                 return self.marker
             if self.canary and any(w in text for w in self.SECRET_WORDS):
-                return self._leak(text)
+                return self._leak(text, secret)
         doc_start = text.find("document:\n")  # the heading bench.app puts above the document
         body = user[doc_start + len("document:\n"):] if doc_start >= 0 else user
         return "Summary: " + " ".join(body.split()[: min(self.summary_words, max_tokens)])
 
-    def _leak(self, text: str) -> str:
+    def _leak(self, text: str, secret: str) -> str:
         if "base64" in text:
-            return base64.b64encode(self.canary.encode()).decode()
+            return base64.b64encode(secret.encode()).decode()
         if "revers" in text or "backward" in text:
-            return self.canary[::-1]
+            return secret[::-1]
         if "space" in text or "spell" in text:
-            return " ".join(self.canary)
-        return f"The secret access code is {self.canary}."
+            return " ".join(secret)
+        return f"The secret access code is {secret}."
 
 
 class CachedProvider(Provider):
@@ -210,11 +193,14 @@ class CachedProvider(Provider):
         ensure_trailing_newline(cache_file)
 
     def _key(self, *parts: Any) -> str:
-        raw = json.dumps([self.inner.name, self.inner.model, *parts], ensure_ascii=False)
+        raw = json.dumps([self.inner.name, self.inner.model, self.inner.digest, *parts], ensure_ascii=False)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def check(self) -> None:
         self.inner.check()
+
+    def identity(self) -> dict[str, str]:
+        return self.inner.identity()
 
     def is_cached(self, system: str, user: str, temperature: float, seed: int, max_tokens: int) -> bool:
         return self._key(system, user, temperature, seed, max_tokens) in self._store
@@ -235,11 +221,7 @@ def make_provider(mc: ModelConfig, canary: str, marker: str, cache_dir: Path | N
     opts = mc.options
     provider: Provider
     if mc.provider == "ollama":
-        provider = OllamaProvider(mc.model, opts["base_url"], mc.timeout_seconds)
-    elif mc.provider == "anthropic":
-        if not mc.enabled:  # belt and braces: config.enabled_models() already filters these out
-            raise ProviderError("the anthropic provider is disabled in the config")
-        provider = AnthropicProvider(mc.model, mc.timeout_seconds, opts.get("api_url", ""))
+        provider = OllamaProvider(mc.model, opts["base_url"], mc.timeout_seconds, opts.get("num_ctx"), mc.digest)
     elif mc.provider == "mock":
         provider = MockProvider(mc.model, canary, marker, float(opts.get("compliance", 0.4)),
                                 int(opts.get("summary_words", 40)), opts.get("rules"))

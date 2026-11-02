@@ -5,6 +5,8 @@
 app:
   canary: CANARY-7f3a91
   marker: PWNED-4471
+  lab_key: 279cf67a6a46926b12da88c642df9d0d
+  corpus_sha256: 497b81f54008cd52896a0dfd726178711055b6857d7e2ac39fa07b0ce690c734
 
 paths:
   attacks_dir: attacks
@@ -23,7 +25,7 @@ defaults:
   max_tokens: 200
   timeout_seconds: 5
   seconds_per_call_estimate: 0.001
-  defenses: [D0, D1, D2, D3, D4]
+  defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
 
 models:
   - name: mock-gullible
@@ -35,5 +37,14 @@ models:
     provider: mock
     model: mock-cautious
     trials: 3
-    defenses: [D0, D2, D4]
+    defenses: [D0, D2, D4, D5, D6, D7]
     options: {compliance: 0.2, summary_words: 40}
+
+reports:
+  - name: cyb240
+    title: "CYB 240 (simulated): prompt injection attacks and low-cost defenses"
+    defenses: [D0, D1, D2, D3, D4]
+  - name: cyb220
+    title: "CYB 220 (simulated): cryptography-inspired defenses against prompt injection"
+    defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
+    new_defenses: [D5, D6, D7]

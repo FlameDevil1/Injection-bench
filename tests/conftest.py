@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def base_config(tmp_path: Path) -> dict:
     """A minimal config dict that uses the real attack corpus and benign set with a mock model."""
     return {
-        "app": {"canary": "CANARY-7f3a91", "marker": "PWNED-4471"},
+        "app": {"canary": "CANARY-7f3a91", "marker": "PWNED-4471", "lab_key": "test-key"},
         "paths": {
             "attacks_dir": str(ROOT / "attacks"),
             "benign_file": str(ROOT / "data" / "benign_tasks.yaml"),
@@ -33,6 +33,12 @@ def write_config(tmp_path: Path, data: dict) -> Path:
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     return path
+
+
+@pytest.fixture(autouse=True)
+def fixed_machine_name(monkeypatch):
+    """Tests write to results/testbox/ whatever computer they run on."""
+    monkeypatch.setenv("BENCH_MACHINE", "testbox")
 
 
 @pytest.fixture

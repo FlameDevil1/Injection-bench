@@ -1,8 +1,15 @@
-# Generated output and local environments; never commit results, caches or keys.
+# Generated output and local environments; never commit caches or real keys.
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-results/
 .cache/
+# Each computer's raw trials and manifest in results/full/<computer>/ ARE committed, so results
+# can be shared. Everything rebuilt from them, and the practice runs, are not.
+results/*
+!results/full/
+results/full/*.md
+results/full/*.png
+results/full/*.csv
+results/full/*/run.log
 .env

@@ -1,20 +1,27 @@
-# Main experiment config: the long (overnight) run against local Ollama models.
-# Run with:  python -m bench.run --config config.yaml
+# Main experiment config: the real run for the CYB 240 and CYB 220 papers, shared by every
+# computer. Scientific settings here are the same everywhere; only the `machines` section
+# can differ per computer. Check a computer first, then run:
+#   python -m bench.doctor --config config.yaml
+#   python -m bench.run --config config.yaml
 # Paths are relative to this file.
 
 app:
   canary: CANARY-7f3a91   # FAKE secret placed in the toy app's system prompt
   marker: PWNED-4471      # string attacks try to make the model print (attacks/*.yaml use it literally)
+  lab_key: 279cf67a6a46926b12da88c642df9d0d   # lab-only HMAC key for D5-D7; protects nothing real
+  # Locks the 36 attacks and 17 benign tasks: a run refuses to start if they change.
+  corpus_sha256: 497b81f54008cd52896a0dfd726178711055b6857d7e2ac39fa07b0ce690c734
 
 paths:
   attacks_dir: attacks
   benign_file: data/benign_tasks.yaml
-  results_dir: results/full
-  cache_dir: .cache       # shared response cache; set to null to disable
+  results_dir: results/full   # each computer writes to results/full/<computer name>/
+  cache_dir: .cache           # local to each computer, never shared; set to null to disable
 
 run:
-  max_calls: null              # stop after this many real (uncached) model calls; null = no limit
-  max_consecutive_errors: 10   # skip the rest of a model after this many failures in a row
+  primary_machine: LAPTOP-EGP9E7NF   # the computer whose results the papers rely on
+  max_calls: null                    # stop after this many real (uncached) model calls; null = no limit
+  max_consecutive_errors: 10         # skip the rest of a model after this many failures in a row
 
 defaults:                      # every model entry inherits these unless it overrides them
   trials: 5
@@ -22,31 +29,41 @@ defaults:                      # every model entry inherits these unless it over
   base_seed: 1000              # trial i uses seed base_seed + i
   max_tokens: 200
   timeout_seconds: 180
-  seconds_per_call_estimate: 25   # only for --dry-run and the first ETA
-  defenses: [D0, D1, D2, D3, D4]
+  seconds_per_call_estimate: 1.5 # only for --dry-run and bench.doctor; set per computer below
+  defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
   options:
     base_url: http://localhost:11434
-    api_url: https://api.anthropic.com/v1/messages
+    num_ctx: 4096              # fixed so Ollama can't pick a different size per computer
 
-# Note: D1, D3 and D4 send the same prompts as D0 or D2, so thanks to the cache they
-# cost (almost) no extra model calls. Trials are what make a run long.
+# Note: D1, D3, D4 and D7 send the same prompts as D0 or D2, so thanks to the cache they
+# cost (almost) no extra model calls. D5 and D6 each need their own calls.
 models:
-  - name: llama3.2              # full grid on the small model
+  - name: llama3.2              # the main model, on the full grid
     provider: ollama
     model: llama3.2
+    digest: a80c4f17acd5        # exact build; a computer with a different one won't run it
 
-  - name: llama3.1-8b           # reduced grid on a larger model (skipped if not pulled)
+  - name: llama3.1-8b           # optional larger model (skipped if not pulled)
     provider: ollama
     model: llama3.1:8b
+    # digest: fill this in after the first pull, so every computer runs the same build
     trials: 3
     max_tokens: 150
     timeout_seconds: 300
-    seconds_per_call_estimate: 60
+    seconds_per_call_estimate: 4
 
-  - name: claude-haiku          # optional paid API; never runs unless enabled: true
-    provider: anthropic
-    model: claude-haiku-4-5-20251001
-    enabled: false
-    trials: 3
-    timeout_seconds: 60
-    seconds_per_call_estimate: 3
+# What each computer may change. Anything else here is rejected, so the experiment stays
+# the same everywhere. Computers not listed just use the defaults. Allowed keys:
+# timeout_seconds, seconds_per_call_estimate, base_url, skip_models.
+machines:
+  LAPTOP-EGP9E7NF: {}
+
+# One report per paper, built from the same results.
+reports:
+  - name: cyb240
+    title: "CYB 240: prompt injection attacks and low-cost defenses"
+    defenses: [D0, D1, D2, D3, D4]
+  - name: cyb220
+    title: "CYB 220: cryptography-inspired defenses against prompt injection"
+    defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
+    new_defenses: [D5, D6, D7]

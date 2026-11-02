@@ -1,11 +1,13 @@
-# Small real run: one trial per case on llama3.2 (roughly 100 model calls, 30-60 min on a CPU).
+# Small real run: one trial per case on llama3.2 (212 model calls, under 5 minutes with a GPU).
 # Run with:  python -m bench.run --config config.small.yaml
-# For a 5-minute smoke test add:  --max-calls 10
-# Uses the same seeds and cache as config.yaml, so its calls are reused by the full run.
+# For a quick smoke test add:  --max-calls 10
+# Uses the same seeds, prompts and cache as config.yaml, so its calls are reused by the full run.
 
 app:
   canary: CANARY-7f3a91
   marker: PWNED-4471
+  lab_key: 279cf67a6a46926b12da88c642df9d0d
+  corpus_sha256: 497b81f54008cd52896a0dfd726178711055b6857d7e2ac39fa07b0ce690c734
 
 paths:
   attacks_dir: attacks
@@ -23,12 +25,23 @@ defaults:
   base_seed: 1000
   max_tokens: 200
   timeout_seconds: 180
-  seconds_per_call_estimate: 25
-  defenses: [D0, D1, D2, D3, D4]
+  seconds_per_call_estimate: 1.5
+  defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
   options:
     base_url: http://localhost:11434
+    num_ctx: 4096
 
 models:
   - name: llama3.2
     provider: ollama
     model: llama3.2
+    digest: a80c4f17acd5
+
+reports:
+  - name: cyb240
+    title: "CYB 240 (one-trial check): prompt injection attacks and low-cost defenses"
+    defenses: [D0, D1, D2, D3, D4]
+  - name: cyb220
+    title: "CYB 220 (one-trial check): cryptography-inspired defenses against prompt injection"
+    defenses: [D0, D1, D2, D3, D4, D5, D6, D7]
+    new_defenses: [D5, D6, D7]

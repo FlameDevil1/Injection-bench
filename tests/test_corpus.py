@@ -1,7 +1,10 @@
 # Tests for bench/corpus.py: the shipped corpus is valid and big enough; bad files are skipped.
 from collections import Counter
 
+from bench.app import load_benign_tasks
+from bench.config import load_config
 from bench.corpus import CATEGORIES, load_attacks
+from bench.provenance import corpus_hash
 from tests.conftest import ROOT
 
 
@@ -14,6 +17,24 @@ def test_shipped_corpus_is_valid_and_complete():
     assert {c.goal for c in cases} == {"leak_secret", "output_marker"}
     assert {c.channel for c in cases} == {"user_message", "document"}
     assert all(c.category != "indirect_document" or c.channel == "document" for c in cases)
+
+
+def test_shipped_configs_lock_the_current_corpus():
+    attacks = load_attacks(ROOT / "attacks")[0]
+    benign = load_benign_tasks(ROOT / "data" / "benign_tasks.yaml")[0]
+    assert (len(attacks), len(benign)) == (36, 17)  # the numbers both proposals state
+    for name in ("config.yaml", "config.small.yaml", "config.mock.yaml"):
+        assert load_config(ROOT / name).corpus_sha256 == corpus_hash(attacks, benign)
+
+
+def test_corpus_fingerprint_ignores_line_endings_and_catches_edits(tmp_path):
+    text = (ROOT / "attacks" / "delimiter_confusion.yaml").read_bytes().replace(b"\r\n", b"\n")
+    (tmp_path / "a.yaml").write_bytes(text)
+    lf = corpus_hash(load_attacks(tmp_path)[0], [])
+    (tmp_path / "a.yaml").write_bytes(text.replace(b"\n", b"\r\n"))
+    assert corpus_hash(load_attacks(tmp_path)[0], []) == lf
+    (tmp_path / "a.yaml").write_bytes(text.replace(b"Debug mode", b"Debug  mode"))
+    assert corpus_hash(load_attacks(tmp_path)[0], []) != lf
 
 
 def test_bad_files_and_cases_are_skipped(tmp_path):

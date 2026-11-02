@@ -14,8 +14,8 @@ N_ATTACKS, N_BENIGN = 36, 17
 REQUIRED = {"case_id", "defense", "trial", "seed", "model", "response", "success", "elapsed_s"}
 
 
-def rows(tmp_path, name="mock"):
-    path = tmp_path / "results" / f"{name}.jsonl"
+def rows(tmp_path, name="mock", machine="testbox"):
+    path = tmp_path / "results" / machine / f"{name}.jsonl"
     if not path.exists():
         return []
     out = []
@@ -40,7 +40,7 @@ def test_full_mock_run_writes_every_trial(tmp_path, config_path):
 
 def test_resume_skips_done_trials_and_survives_half_written_line(tmp_path, config_path):
     main(["--config", str(config_path), "--no-report"])
-    path = tmp_path / "results" / "mock.jsonl"
+    path = tmp_path / "results" / "testbox" / "mock.jsonl"
     lines = path.read_text(encoding="utf-8").splitlines()
     total = len(lines)
     path.write_text("\n".join(lines[:-10]) + "\n" + '{"case_id": "DO01", "defe', encoding="utf-8")
@@ -117,13 +117,71 @@ def test_unreachable_ollama_is_skipped_not_fatal(tmp_path, monkeypatch):
     assert rows(tmp_path, "local") == [] and rows(tmp_path)  # mock still ran
 
 
-def test_disabled_anthropic_never_runs(tmp_path, monkeypatch):
-    monkeypatch.setattr(prov, "AnthropicProvider", None)  # any attempt to build it would crash
+def test_each_computer_writes_to_its_own_folder_with_a_manifest(tmp_path, config_path):
+    main(["--config", str(config_path), "--no-report", "--machine", "laptop"])
+    main(["--config", str(config_path), "--no-report", "--machine", "desktop"])
+    assert {r["machine"] for r in rows(tmp_path, machine="laptop")} == {"laptop"}
+    assert {r["machine"] for r in rows(tmp_path, machine="desktop")} == {"desktop"}
+    manifest = json.loads((tmp_path / "results" / "laptop" / "manifest.json").read_text(encoding="utf-8"))
+    record = manifest["models"]["mock"]
+    assert manifest["machine"] == "laptop" and manifest["hardware"]["python"]
+    assert record["corpus_sha256"] and record["protocol_sha256"] and record["git_commits"]
+
+
+@pytest.mark.parametrize("change", ["temperature", "prompt"])
+def test_resume_refuses_to_mix_two_experiments(tmp_path, monkeypatch, change):
     data = base_config(tmp_path)
-    data["models"].append({"name": "claude", "provider": "anthropic", "model": "m",
-                           "options": {"api_url": "https://example.invalid"}})
+    path = write_config(tmp_path, data)
+    main(["--config", str(path), "--no-report", "--max-calls", "2"])
+    before = len(rows(tmp_path))
+    if change == "temperature":
+        data["defaults"]["temperature"] = 0.1
+    else:
+        data["app"]["lab_key"] = "a-different-key"
     assert main(["--config", str(write_config(tmp_path, data)), "--no-report"]) == 0
-    assert rows(tmp_path, "claude") == []
+    assert len(rows(tmp_path)) == before
+
+
+def test_more_trials_can_be_added_to_existing_results(tmp_path):
+    data = base_config(tmp_path)
+    main(["--config", str(write_config(tmp_path, data)), "--no-report"])
+    before = len(rows(tmp_path))
+    data["defaults"]["trials"] = 3
+    main(["--config", str(write_config(tmp_path, data)), "--no-report"])
+    assert len(rows(tmp_path)) == before + (N_ATTACKS + N_BENIGN) * 2
+
+
+def test_changed_corpus_stops_the_run(tmp_path):
+    data = base_config(tmp_path)
+    data["app"]["corpus_sha256"] = "0" * 64
+    assert main(["--config", str(write_config(tmp_path, data)), "--no-report"]) == 2
+    assert rows(tmp_path) == []
+
+
+def test_computers_never_share_cached_replies(tmp_path, config_path):
+    main(["--config", str(config_path), "--no-report", "--machine", "laptop"])
+    main(["--config", str(config_path), "--no-report", "--machine", "desktop"])
+    assert not any(r["cached"] for r in rows(tmp_path, machine="desktop") if r["defense"] == "D0")
+
+
+def test_d6_records_would_be_leaks_apart_from_the_main_score(tmp_path):
+    data = base_config(tmp_path)
+    data["defaults"]["defenses"] = ["D6"]
+    data["models"][0]["options"] = {"compliance": 1.0}
+    main(["--config", str(write_config(tmp_path, data)), "--no-report"])
+    out = [r for r in rows(tmp_path) if r["goal"] == "leak_secret"]
+    assert any(r["would_be_leak"] for r in out)
+    assert not any(r["success"] for r in out)  # the real secret was never in the prompt
+    assert all(r["would_be_leak"] in (True, False) for r in out)
+
+
+def test_d5_uses_a_different_prompt_each_trial_and_d7_reuses_d0(tmp_path):
+    data = base_config(tmp_path)
+    data["defaults"]["defenses"] = ["D0", "D5", "D7"]
+    main(["--config", str(write_config(tmp_path, data)), "--no-report"])
+    out = rows(tmp_path)
+    assert not any(r["cached"] for r in out if r["defense"] == "D5")
+    assert all(r["cached"] for r in out if r["defense"] == "D7")
 
 
 def test_ctrl_c_keeps_partial_results_and_resume_finishes(tmp_path, config_path, monkeypatch, capsys):
