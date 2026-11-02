@@ -14,8 +14,7 @@ only target. Each call sends the model:
 - a **user request** (for example, "summarize the attached document");
 - one **untrusted document** that MailMate was asked to process.
 
-The model is a local Ollama model by default. The optional Anthropic entry stays off
-unless the config enables it.
+The model is a local model served by Ollama, and nothing leaves the computer.
 
 ## Assets
 
@@ -38,7 +37,7 @@ The attacker **can**:
 The attacker **cannot**:
 
 - change the system prompt, the code, the defenses, or the model;
-- see the model's hidden state, logits, or the delimiter tag chosen by D2;
+- see the model's hidden state, logits, the delimiter tag chosen by D2 or D5, or the lab key;
 - adapt: each attack is a fixed string, and nobody iterates on failures (see Limitations).
 
 ## Attacker goals
@@ -50,8 +49,14 @@ The attacker **cannot**:
 
 ## Defenses in scope
 
-D0 none, D1 regex input filter, D2 delimiters plus a hardened system prompt, D3 output
-filter for the canary and marker, and D4 all combined. See `bench/defenses.py`.
+The CYB 240 baseline: D0 none, D1 regex input filter, D2 delimiters plus a hardened system
+prompt, D3 output filter for the canary and marker, and D4 all combined.
+
+The CYB 220 designs, which borrow ideas from cryptography: D5 nonce-authenticated delimiters,
+D6 secret indirection, and D7 a keyed-hash output check. See `bench/defenses.py`. The model can't
+verify a tag or a hash, so these checks run in the application's own code. They use a lab-only
+key that sits in the config, which is fine here because it protects nothing real; a real
+application would keep its key out of the code.
 
 ## Out of scope
 
