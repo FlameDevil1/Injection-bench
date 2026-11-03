@@ -16,6 +16,9 @@ There is no telemetry, and no code points at any other app or service.
 **New here?** [docs/guide.md](docs/guide.md) is a hands-on walkthrough: the sandbox, attacking a
 model by hand with `play.py`, running experiments, reading results, and changing things.
 
+**Want the results?** [docs/results_explained.md](docs/results_explained.md) explains what the full run
+found, for a cybersecurity student.
+
 ## How it works
 
 1. **36 fixed attacks** (`attacks/*.yaml`) in 5 categories try to make MailMate leak the canary or
@@ -221,6 +224,7 @@ paired.
 | `bench/report.py` | Tables, heatmaps, findings, hardware comparison, the reports. |
 | `play.py` | Playground: send one attack or your own text through each defense and see every step. |
 | `docs/guide.md` | Hands-on guide to using and extending the bench. |
+| `docs/results_explained.md` | What the full run found, explained in plain terms. |
 | `docs/threat_model.md` | Assets, attacker, goals, scope, metrics. |
 | `docs/roadmap.md` | Out-of-scope future extensions and where they'd plug in. |
 

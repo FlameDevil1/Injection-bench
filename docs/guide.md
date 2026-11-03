@@ -612,7 +612,7 @@ Copy `config.small.yaml` to e.g. `config.exp1.yaml`, change `results_dir` to
 | `the attacks or benign tasks changed` | The corpus is locked. Undo the edit, or experiment in a separate config (section 7). |
 | `[...] changed since these results were started` | Something that affects the science changed, often an Ollama update. Undo it, or point `results_dir` at a new folder. |
 | `is build ..., but the config expects ...` | This computer has a different build of the model. Run `ollama pull` for it; if it still differs, the model was updated upstream, and that needs a team decision. |
-| `running partly on the CPU` or `on the CPU only` from `bench.doctor` | It'll still work but be slower. Check for GPU driver updates, and close other programs using the GPU. |
+| `running partly on the CPU` or `on the CPU only` from `bench.doctor` | It'll still work but be much slower, and shouldn't be mixed with GPU runs. On a laptop, check power-saving GPU settings first (G-Helper's Eco mode turns the dedicated GPU off), then restart Ollama, because it only looks for GPUs when it starts. Otherwise, check for GPU driver updates and close other programs using the GPU. |
 | The report says `Primary computer missing` | The primary computer hasn't pushed results yet, or its name in `run.primary_machine` doesn't match. |
 | The run stopped overnight | The laptop probably slept. Re-run the same command; it resumes. |
 | I want to start completely fresh | Delete the run's folder (e.g. `results\small`). Also delete `.cache` if you want fresh model answers rather than cached ones. |
