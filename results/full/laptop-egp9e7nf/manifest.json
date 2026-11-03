@@ -1,0 +1,33 @@
+{
+  "machine": "laptop-egp9e7nf",
+  "hardware": {
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.2",
+    "cpu": "AMD Ryzen 7 7735HS with Radeon Graphics",
+    "gpus": [
+      "AMD Radeon(TM) Graphics",
+      "AMD Radeon RX 7600S"
+    ],
+    "ram_gb": 15.2
+  },
+  "models": {
+    "llama3.2": {
+      "model_digest": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+      "server_version": "0.34.4",
+      "corpus_sha256": "497b81f54008cd52896a0dfd726178711055b6857d7e2ac39fa07b0ce690c734",
+      "protocol_sha256": "d1df3aea3c86a4d779a967d764a638161d4194287509c6772d282a2225f0e72f",
+      "model_id": "llama3.2",
+      "provider": "ollama",
+      "temperature": 0.7,
+      "base_seed": 1000,
+      "max_tokens": 200,
+      "num_ctx": 4096,
+      "git_commits": [
+        {
+          "commit": "71e2e25",
+          "uncommitted_changes": false
+        }
+      ]
+    }
+  }
+}
