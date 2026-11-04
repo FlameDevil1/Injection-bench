@@ -19,7 +19,7 @@ paths:
   cache_dir: .cache           # local to each computer, never shared; set to null to disable
 
 run:
-  primary_machine: LAPTOP-EGP9E7NF   # the computer whose results the papers rely on
+  primary_machine: LAPTOP-EGP9E7NF   # the computer the papers rely on, unless a model names its own
   max_calls: null                    # stop after this many real (uncached) model calls; null = no limit
   max_consecutive_errors: 10         # skip the rest of a model after this many failures in a row
 
@@ -43,12 +43,14 @@ models:
     model: llama3.2
     digest: a80c4f17acd5        # exact build; a computer with a different one won't run it
 
-  - name: llama3.1-8b           # optional larger model (skipped if not pulled)
+  # The larger comparison model (skipped if not pulled). It uses the same trials and answer
+  # length as llama3.2, so the two are compared fairly. Its download is 4.9 GB, so it needs a
+  # GPU with about 8 GB of memory. To choose which computer the papers use for it, add:
+  #   primary_machine: <that computer's name from bench.doctor>
+  - name: llama3.1-8b
     provider: ollama
     model: llama3.1:8b
-    # digest: fill this in after the first pull, so every computer runs the same build
-    trials: 3
-    max_tokens: 150
+    digest: 46e0c10c039e
     timeout_seconds: 300
     seconds_per_call_estimate: 4
 

@@ -105,6 +105,52 @@ def test_report_warns_when_the_primary_computer_has_no_results(tmp_path):
     assert "Primary computer missing" in text and "## Hardware comparison" not in text
 
 
+def _two_model_config(tmp_path, big_primary=None):
+    data = base_config(tmp_path)
+    data["run"]["primary_machine"] = "laptop"
+    data["defaults"]["defenses"] = ["D0", "D2"]
+    big = {"name": "big", "provider": "mock", "model": "big", "options": {"compliance": 0.1}}
+    if big_primary:
+        big["primary_machine"] = big_primary
+    data["models"].append(big)
+    data["machines"] = {"laptop": {"skip_models": ["big"]}}
+    return write_config(tmp_path, data)
+
+
+def test_larger_model_can_run_only_on_another_computer(tmp_path):
+    path = _two_model_config(tmp_path, big_primary="desktop")
+    main(["--config", str(path), "--machine", "laptop", "--no-report"])
+    main(["--config", str(path), "--machine", "desktop"])
+    text = (tmp_path / "results" / "report.md").read_text(encoding="utf-8")
+    assert "Main results by model: `big` from `desktop`, `mock` from `laptop`." in text
+    assert "## Results: big" in text and "## Results: mock" in text and "Primary computer missing" not in text
+    assert "These tables use `desktop`, the computer that ran every model" in text
+    assert "`desktop` against `laptop`" in text and "`laptop` against `desktop`" not in text
+    assert "### big" not in text.split("## Hardware comparison")[1]  # only one computer ran it
+
+
+def test_report_warns_until_the_larger_models_computer_is_chosen(tmp_path):
+    path = _two_model_config(tmp_path)
+    main(["--config", str(path), "--machine", "laptop", "--no-report"])
+    main(["--config", str(path), "--machine", "desktop"])
+    text = (tmp_path / "results" / "report.md").read_text(encoding="utf-8")
+    assert "Primary computer missing for big" in text and "## Results: big" in text
+    assert "Primary computer missing for mock" not in text
+
+
+def test_models_with_no_shared_computer_get_a_warning(tmp_path):
+    data = base_config(tmp_path)
+    data["defaults"]["defenses"] = ["D0"]
+    data["models"].append({"name": "big", "provider": "mock", "model": "big", "primary_machine": "desktop"})
+    data["models"][0]["primary_machine"] = "laptop"
+    data["machines"] = {"laptop": {"skip_models": ["big"]}, "desktop": {"skip_models": ["mock"]}}
+    path = write_config(tmp_path, data)
+    main(["--config", str(path), "--machine", "laptop", "--no-report"])
+    main(["--config", str(path), "--machine", "desktop"])
+    text = (tmp_path / "results" / "report.md").read_text(encoding="utf-8")
+    assert "These models ran on different computers" in text
+
+
 def test_versus_uses_the_non_overlap_rule():
     low = pd.DataFrame({"success": [False] * 50})
     high = pd.DataFrame({"success": [True] * 50})

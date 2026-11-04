@@ -258,8 +258,8 @@ Then run it:
 .venv\Scripts\python -m bench.run --config config.yaml
 ```
 
-It runs `llama3.2` with 5 trials, then `llama3.1:8b` with 3 trials (pull it first, or it's skipped
-with a message). It shares the cache with the small run, so trial 0 of `llama3.2` is already free.
+It runs `llama3.2`, then `llama3.1:8b` with the same settings (pull it first, or it's skipped with a
+message). It shares the cache with the small run, so trial 0 of `llama3.2` is already free.
 
 Before you start: plug in the laptop and set Windows sleep to *Never* while plugged in. Try to finish in one
 go, because if Ollama updates itself partway through, the bench won't mix results from the two versions.
@@ -342,6 +342,22 @@ machines:
 Only timeouts, time estimates, the Ollama address and skipped models are allowed there. Anything that would
 change the experiment is rejected. Use the same Ollama version on every computer if you can; the report
 points it out if they differ.
+
+### 5.8 Running the larger model
+
+`llama3.1:8b` is a 4.9 GB download, so use a computer whose GPU has about 8 GB of memory or more. On that computer,
+run `ollama pull llama3.1:8b`, then follow the steps in 5.7. Check that `bench.doctor` shows the model fully on the GPU.
+
+That computer runs `llama3.2` too, so the report can compare both models on one computer. To set which computer the
+papers use for the larger model, add this to its entry in `config.yaml`, using the name `bench.doctor` shows:
+
+```yaml
+  - name: llama3.1-8b
+    primary_machine: DESKTOP-ABC123
+```
+
+A larger model isn't automatically safer. It might refuse more tricks, or it might understand tricks that went over
+the small model's head, like the scrambled ones. Either result is useful.
 
 ---
 
@@ -591,7 +607,7 @@ Copy `config.small.yaml` to e.g. `config.exp1.yaml`, change `results_dir` to
 | `defaults.defenses` | Which of D0–D7 to run. |
 | `defaults.options.base_url` | Ollama address. |
 | `defaults.options.num_ctx` | Ollama's context size, fixed so it can't differ per computer. |
-| `models[]` | One entry per model: `name`, `provider` (`ollama` or `mock`), `model`, optional `enabled` and `digest`, and any `defaults` key to override. Mock models take `options.compliance` (0–1, how gullible) and `options.summary_words`. |
+| `models[]` | One entry per model: `name`, `provider` (`ollama` or `mock`), `model`, optional `enabled`, `digest` and `primary_machine`, and any `defaults` key to override. Mock models take `options.compliance` (0–1, how gullible) and `options.summary_words`. |
 | `machines` | Per-computer settings: only `timeout_seconds`, `seconds_per_call_estimate`, `base_url` and `skip_models`. |
 | `reports[]` | One report each: `name`, `title`, `defenses`, and optional `new_defenses` to compare against the rest. |
 

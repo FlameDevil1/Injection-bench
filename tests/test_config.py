@@ -55,6 +55,20 @@ def test_machine_cannot_change_the_experiment(tmp_path, key):
         load_config(write_config(tmp_path, data))
 
 
+def test_larger_model_is_set_up_for_a_fair_comparison():
+    small, large = load_config(ROOT / "config.yaml").models
+    assert (large.model, large.digest) == ("llama3.1:8b", "46e0c10c039e")
+    for setting in ("trials", "temperature", "base_seed", "max_tokens", "defenses", "options"):
+        assert getattr(large, setting) == getattr(small, setting), setting
+
+
+def test_model_can_name_its_own_primary_machine(tmp_path):
+    data = base_config(tmp_path)
+    data["models"].append({"name": "big", "provider": "mock", "model": "big", "primary_machine": "DESKTOP-1"})
+    cfg = load_config(write_config(tmp_path, data))
+    assert cfg.models[0].primary_machine is None and cfg.models[1].primary_machine == "desktop-1"
+
+
 def test_primary_machine_and_reports(tmp_path):
     data = base_config(tmp_path)
     data["run"]["primary_machine"] = "LAPTOP-1"

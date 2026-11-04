@@ -1,6 +1,6 @@
 # Turns the results JSONL files into one markdown report per entry under `reports:` in the
 # config, with category x defense tables and 95% Wilson intervals, a security-vs-utility
-# table, heatmaps, findings and limitations. Paper numbers come only from the primary
+# table, heatmaps, findings and limitations. Paper numbers for each model come from one
 # computer; other computers appear in a separate hardware comparison, never pooled in.
 #   python -m bench.report --config config.yaml
 from __future__ import annotations
@@ -343,9 +343,9 @@ def model_section(name: str, df: pd.DataFrame, errors: pd.DataFrame, out_dir: Pa
     return lines
 
 
-def comparison_section(df: pd.DataFrame) -> list[str]:
+def comparison_section(df: pd.DataFrame, note: str = "") -> list[str]:
     defenses = ordered_defenses(df)
-    lines = ["## Model comparison", ""]
+    lines = ["## Model comparison", ""] + ([note, ""] if note else [])
     for kind, label in (("attack", "Attack success (lower is better)"), ("benign", "Benign task success (higher is better)")):
         sub = df[df["kind"] == kind]
         rows = [[m] + [fmt_df(sub[(sub["model"] == m) & (sub["defense"] == d)]) for d in defenses]
@@ -364,21 +364,58 @@ def agreement(a: pd.DataFrame, b: pd.DataFrame) -> str:
     return f"{same_verdict:.0%} same verdict, {same_text:.0%} identical reply text ({len(pair)} trials)"
 
 
-def hardware_section(df: pd.DataFrame, primary: str, manifests: dict[str, dict]) -> list[str]:
+def model_primaries(cfg: Config, rows: pd.DataFrame) -> tuple[dict[str, str], list[str]]:
+    """Which computer's results to use for each model, plus a warning for any that isn't the chosen one."""
+    entries = {m.name: m for m in cfg.models}
+    primaries: dict[str, str] = {}
+    warnings: list[str] = []
+    for model, group in rows.groupby("model"):
+        found = group["machine"].value_counts()
+        entry = entries.get(model)
+        wanted = (entry.primary_machine if entry else None) or cfg.primary_machine
+        if wanted in found.index:
+            primaries[model] = wanted
+            continue
+        primaries[model] = sorted(found.index, key=lambda m: (-found[m], m))[0]
+        if wanted:
+            warnings.append(f"> **Primary computer missing for {model}.** The config names `{wanted}`, which has no results "
+                            f"for it yet, so this report uses `{primaries[model]}` for now. To choose, set `primary_machine` "
+                            f"on the model in the config.")
+    return primaries, warnings
+
+
+def comparison_rows(cfg: Config, picked: pd.DataFrame, df: pd.DataFrame, primaries: dict[str, str]) -> tuple[pd.DataFrame, str]:
+    """Compare models on one computer if possible, so hardware isn't a factor."""
+    if len(set(primaries.values())) == 1:
+        return df, ""
+    common = [m for m in sorted(picked["machine"].unique())
+              if picked[picked["machine"] == m]["model"].nunique() == len(primaries)]
+    if not common:
+        return df, "These models ran on different computers, so some of the differences may come from hardware."
+    use = cfg.primary_machine if cfg.primary_machine in common else common[0]
+    return picked[picked["machine"] == use], (f"These tables use `{use}`, the computer that ran every model, so hardware isn't "
+                                              f"a factor. Its numbers can differ slightly from the sections above.")
+
+
+def hardware_section(df: pd.DataFrame, primaries: dict[str, str], manifests: dict[str, dict]) -> list[str]:
     """Other computers, kept apart from the numbers above. Hardware can change the exact replies."""
+    used = ", ".join(f"`{m}` for {model}" for model, m in sorted(primaries.items()))
     lines = ["## Hardware comparison", "",
-             f"The results above come only from `{primary}`. These computers ran the same experiment as a replication. "
+             f"The results above use {used}. Other computers ran the same experiment as a replication. "
              "Replies also vary between runs on one computer, so a disagreement here doesn't show that hardware caused it.", ""]
     rows = []
     for name in sorted(df["machine"].unique()):
         info = manifests.get(name, {}).get("hardware", {})
-        rows.append([name + (" (primary)" if name == primary else ""), info.get("cpu", "unknown"),
+        rows.append([name + (" (primary)" if name in primaries.values() else ""), info.get("cpu", "unknown"),
                      "; ".join(info.get("nvidia", info.get("gpus", []))) or "unknown", info.get("ram_gb", "unknown")])
     lines += [md_table(["computer", "CPU", "GPU", "RAM (GB)"], rows), ""]
     defenses = ordered_defenses(df)
     for model in sorted(df["model"].unique()):
         sub = df[df["model"] == model]
         machines = sorted(sub["machine"].unique())
+        if len(machines) < 2:
+            continue
+        primary = primaries[model]
         lines += [f"### {model}", ""]
         builds = {manifests.get(m, {}).get("models", {}).get(model, {}).get("model_digest", "") for m in machines}
         versions = {manifests.get(m, {}).get("models", {}).get(model, {}).get("server_version", "") for m in machines}
@@ -406,16 +443,19 @@ def write_one(cfg: Config, spec: ReportSpec, all_rows: pd.DataFrame, all_errors:
     reuse_d0 = ", ".join(d for d in ("D1", "D3", "D7") if d in spec.defenses)
     picked = all_rows[all_rows["defense"].isin(spec.defenses)] if len(all_rows) else all_rows
     machines = sorted(picked["machine"].unique()) if len(picked) else []
-    primary = cfg.primary_machine if cfg.primary_machine in machines else (machines[0] if machines else None)
-    df = picked[picked["machine"] == primary] if primary else picked
-    errors = all_errors[all_errors["machine"] == primary] if primary and len(all_errors) else all_errors.iloc[0:0]
+    primaries, warnings = model_primaries(cfg, picked) if len(picked) else ({}, [])
+    df = picked[[primaries[m] == x for m, x in zip(picked["model"], picked["machine"])]] if len(picked) else picked
+    errors = (all_errors[[primaries.get(m) == x for m, x in zip(all_errors["model"], all_errors["machine"])]]
+              if len(all_errors) else all_errors.iloc[0:0])
 
     lines = [f"# {spec.title}", "", f"Generated {datetime.now():%Y-%m-%d %H:%M} from `{out_dir.name}`.", ""]
-    if primary:
-        lines += [f"All main results come from one computer, `{primary}`.", ""]
-    if cfg.primary_machine and machines and primary != cfg.primary_machine:
-        lines += [f"> **Primary computer missing.** The config names `{cfg.primary_machine}`, which has no results yet, "
-                  f"so this report uses `{primary}` for now.", ""]
+    if len(set(primaries.values())) == 1:
+        lines += [f"All main results come from one computer, `{next(iter(primaries.values()))}`.", ""]
+    elif primaries:
+        by_model = ", ".join(f"`{model}` from `{m}`" for model, m in sorted(primaries.items()))
+        lines += [f"Main results by model: {by_model}.", ""]
+    for warning in warnings:
+        lines += [warning, ""]
     if len(df) and (df["provider"] == "mock").any():
         lines += ["> **Simulated data.** Some or all results below come from MockProvider, a scripted fake model. "
                   "They exercise the pipeline and say nothing about real language models.", ""]
@@ -442,7 +482,7 @@ def write_one(cfg: Config, spec: ReportSpec, all_rows: pd.DataFrame, all_errors:
     else:
         info = []
         for name, g in df.groupby("model"):
-            digest = manifests.get(primary, {}).get("models", {}).get(name, {}).get("model_digest", "")
+            digest = manifests.get(primaries[name], {}).get("models", {}).get(name, {}).get("model_digest", "")
             info.append([name, g["provider"].iloc[0], g["model_id"].iloc[0], digest[:12] or "-", g["trial"].nunique(),
                          g["temperature"].iloc[0], g["max_tokens"].iloc[0], ", ".join(ordered_defenses(g)),
                          len(g), int((errors["model"] == name).sum()) if len(errors) else 0])
@@ -452,9 +492,10 @@ def write_one(cfg: Config, spec: ReportSpec, all_rows: pd.DataFrame, all_errors:
             errs = errors[errors["model"] == name] if len(errors) else errors
             lines += model_section(str(name), g, errs, out_dir, spec, cfg.marker)
         if df["model"].nunique() > 1:
-            lines += comparison_section(df)
+            rows, note = comparison_rows(cfg, picked, df, primaries)
+            lines += comparison_section(rows, note)
         if len(machines) > 1:
-            lines += hardware_section(picked, primary, manifests)
+            lines += hardware_section(picked, primaries, manifests)
     lines += [
         "## Limitations", "",
         "- **Small models.** Local models of a few billion parameters; results may not transfer to larger or "

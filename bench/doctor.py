@@ -84,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
             continue
         ready += 1
         identity = provider.identity()
-        print(f"Model {mc.name}: build {identity['model_digest'][:12] or 'n/a'}, Ollama {identity['server_version'] or 'n/a'}")
+        uses_this = cfg.machine == (mc.primary_machine or cfg.primary_machine)
+        print(f"Model {mc.name}: build {identity['model_digest'][:12] or 'n/a'}, Ollama {identity['server_version'] or 'n/a'}"
+              + ("  (the papers use this computer for it)" if uses_this else ""))
         calls = planned_calls(build_jobs(mc, attacks, benign, cfg.canary), provider, mc, cfg.cache_dir is not None, secrets)
         if mc.provider == "ollama":
             try:

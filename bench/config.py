@@ -41,6 +41,7 @@ class ModelConfig:
     seconds_per_call_estimate: float  # used for --dry-run only
     defenses: list[str]
     digest: str | None = None  # start of the exact model build every computer must use
+    primary_machine: str | None = None  # the computer the papers use for this model, if not the main one
     options: dict[str, Any] = field(default_factory=dict)  # provider-specific extras
 
 
@@ -142,6 +143,7 @@ def _model(entry: Any, defaults: dict, index: int) -> ModelConfig:
         seconds_per_call_estimate=_get(merged, "seconds_per_call_estimate", float, where),
         defenses=_get(merged, "defenses", list, where),
         digest=merged.get("digest"),
+        primary_machine=machine_name(entry["primary_machine"]) if entry.get("primary_machine") else None,
         options=merged["options"],
     )
     if mc.trials < 1 or mc.max_tokens < 1 or mc.timeout_seconds <= 0:

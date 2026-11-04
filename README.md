@@ -124,8 +124,8 @@ a quick smoke test.
 
 ## The real run
 
-`config.yaml` runs all 8 defenses on `llama3.2` (5 trials) and on `llama3.1:8b` (3 trials, shorter
-answers). A model that isn't pulled is skipped with a message. `llama3.2` needs about 1,060 model calls,
+`config.yaml` runs all 8 defenses for 5 trials on `llama3.2` and on the larger `llama3.1:8b`, with the
+same settings so they're compared fairly. A model that isn't pulled is skipped with a message. `llama3.2` needs about 1,060 model calls,
 about 20 minutes at the 1.1 seconds per call we measured on a laptop GPU. A CPU would be far slower, and
 `bench.doctor` shows which one you have.
 
@@ -147,8 +147,9 @@ about 20 minutes at the 1.1 seconds per call we measured on a laptop GPU. A CPU 
 
 Every computer runs the whole experiment itself, from the same repo, and its results stay separate.
 
-- **One primary computer.** `run.primary_machine` in `config.yaml` names the computer whose results the
-  papers use. The others appear only in a **Hardware comparison** section, never pooled in.
+- **One primary computer per model.** `run.primary_machine` in `config.yaml` names the computer whose results
+  the papers use, and a model can name its own. The others appear only in a **Hardware comparison** section,
+  never pooled in.
 - **Results are labelled.** Each computer writes to `results/full/<computer name>/`, with a `manifest.json`
   recording its hardware, Ollama version, exact model build and code version. The computer name is its
   hostname unless you pass `--machine NAME` or set `BENCH_MACHINE`. Use the same name every time.
@@ -191,6 +192,20 @@ git push
 ```
 
 Once all computers have pushed, anyone can run `git pull` and `bench.report` to build the reports.
+
+### Running the larger model
+
+`llama3.1:8b` is a 4.9 GB download, so run it on a computer whose GPU has about 8 GB of memory or more. Pull it
+there, then follow the steps above. `bench.doctor` shows the computer's name and whether the model is fully on
+the GPU.
+
+```bash
+ollama pull llama3.1:8b
+```
+
+That computer also runs `llama3.2`, so the report can compare the two models on one computer, with hardware out
+of the picture. To tell the papers which computer to use for the larger model, add `primary_machine` to its entry in
+`config.yaml`. Until you do, the report uses whichever computer has the most results for it and shows a warning.
 
 ## Outputs
 
